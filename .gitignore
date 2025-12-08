@@ -1,0 +1,9 @@
+# MySQL data
+/docker/mysql/data/
+
+# SQLite database (Laravelデフォルト)
+/src/database/*.sqlite
+/src/database/*.sqlite-journal
+
+# Backup
+src-laravel8-backup/
