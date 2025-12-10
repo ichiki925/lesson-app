@@ -34,4 +34,6 @@ Route::prefix('lesson-slots')->group(function () {
 
     // 空き枠作成（単発）
     Route::post('/', [LessonSlotController::class, 'store']);
+
+    Route::delete('/{id}', [LessonSlotController::class, 'destroy']);
 });

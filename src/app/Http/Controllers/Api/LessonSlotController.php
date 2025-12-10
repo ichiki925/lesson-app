@@ -142,4 +142,51 @@ class LessonSlotController extends Controller
      */
     
 
+    /**
+     * 空き枠削除
+     * DELETE /api/lesson-slots/{id}
+     */
+    public function destroy($id)
+    {
+        try {
+            DB::beginTransaction();
+
+            // 空き枠を取得
+            $slot = LessonSlot::find($id);
+
+            if (!$slot) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '空き枠が見つかりません'
+                ], 404);
+            }
+
+            // 予約が入っているかチェック
+            if ($slot->reservations()->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'この空き枠には予約が入っているため削除できません'
+                ], 422);
+            }
+
+            // 削除実行
+            $slot->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => '空き枠を削除しました'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => '空き枠の削除に失敗しました',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }
