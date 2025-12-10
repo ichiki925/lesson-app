@@ -290,4 +290,137 @@ class LessonSlotController extends Controller
         }
     }
 
+    /**
+     * 空き枠一括作成
+     * POST /api/lesson-slots/bulk
+     */
+    public function bulkStore(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'teacher_id' => 'required|exists:teachers,id',
+            'date' => 'required|date|after_or_equal:today',
+            'slots' => 'required|array|min:1',
+            'slots.*.start_time' => 'required|date_format:H:i',
+            'slots.*.duration' => 'required|in:30,60',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $createdSlots = [];
+            $errors = [];
+
+            foreach ($request->slots as $index => $slotData) {
+                // 終了時刻を計算
+                $startTime = Carbon::createFromFormat('H:i', $slotData['start_time']);
+                $endTime = $startTime->copy()->addMinutes($slotData['duration']);
+
+                // ① 配列内での重複チェック（flagを使う）
+                $hasInternalOverlap = false;
+
+                foreach ($createdSlots as $created) {
+                    $createdStart = Carbon::parse($created->start_time);
+                    $createdEnd = Carbon::parse($created->end_time);
+
+                    // 時間帯の重なり判定（境界ちょうどはOKにする）
+                    if ($startTime->lt($createdEnd) && $endTime->gt($createdStart)) {
+                        $errors[] = [
+                            'index' => $index,
+                            'start_time' => $slotData['start_time'],
+                            'message' => 'この時間帯は既に登録されています（同一リクエスト内）'
+                        ];
+                        $hasInternalOverlap = true;
+                        break; // 内側のforeachだけ抜ける
+                    }
+                }
+
+                if ($hasInternalOverlap) {
+                    // このスロットは登録せず、次のスロットへ
+                    continue;
+                }
+
+                // ② DB 上の既存枠との重複チェック（既に作成したスロットは除外）
+                $query = LessonSlot::where('teacher_id', $request->teacher_id)
+                    ->whereDate('date', $request->date);
+
+                // 既に作成したスロットがあれば除外
+                if (!empty($createdSlots)) {
+                    $createdIds = collect($createdSlots)->pluck('id')->filter()->toArray();
+                    if (!empty($createdIds)) {
+                        $query->whereNotIn('id', $createdIds);
+                    }
+                }
+
+                $startTimeStr = $slotData['start_time'] . ':00';  // ← 秒を追加
+                $endTimeStr = $endTime->format('H:i:s');
+
+                $overlappingSlots = $query->where(function ($q) use ($startTimeStr, $endTimeStr) {
+                        $q->whereTime('start_time', '<', $endTimeStr)
+                        ->whereTime('end_time', '>', $startTimeStr);
+                    })
+                    ->get(['id', 'start_time', 'end_time']);
+
+                \Log::info('DB重複チェック', [
+                    '新規スロット' => $startTimeStr . '-' . $endTimeStr,
+                    '既存枠数' => $overlappingSlots->count(),
+                    '既存枠' => $overlappingSlots->toArray()
+                ]);
+
+                $overlapping = $overlappingSlots->count() > 0;
+
+                if ($overlapping) {
+                    $errors[] = [
+                        'index' => $index,
+                        'start_time' => $slotData['start_time'],
+                        'message' => 'この時間帯は既に登録されています（DB上）'
+                    ];
+                    continue;
+                }
+                // 空き枠作成
+                $slot = LessonSlot::create([
+                    'teacher_id' => $request->teacher_id,
+                    'date' => $request->date,
+                    'start_time' => $slotData['start_time'],
+                    'end_time' => $endTime->format('H:i:s'),
+                    'duration' => $slotData['duration'],
+                    'is_available' => true,
+                ]);
+
+                $createdSlots[] = $slot;
+            }
+
+            // エラーがあれば全てロールバック
+            if (!empty($errors)) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => '一部の空き枠で重複エラーが発生しました',
+                    'errors' => $errors
+                ], 422);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => count($createdSlots) . '件の空き枠を作成しました',
+                'data' => $createdSlots
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => '空き枠の一括作成に失敗しました',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

@@ -33,4 +33,5 @@ Route::prefix('lesson-slots')->group(function () {
     Route::post('/', [LessonSlotController::class, 'store']);
     Route::put('/{id}', [LessonSlotController::class, 'update']);
     Route::delete('/{id}', [LessonSlotController::class, 'destroy']);
+    Route::post('/bulk', [LessonSlotController::class, 'bulkStore']);
 });
