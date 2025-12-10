@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ReservationController;
+use App\Http\Controllers\Api\LessonSlotController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -24,4 +25,13 @@ Route::prefix('reservations')->group(function () {
 
     // 生徒の予約履歴を取得
     Route::get('student/history', [ReservationController::class, 'getStudentReservations']);
+});
+
+// 先生側: 空き枠管理API（認証は後で追加）
+Route::prefix('lesson-slots')->group(function () {
+    // 空き枠一覧取得（カレンダー表示用）
+    Route::get('/', [LessonSlotController::class, 'index']);
+
+    // 空き枠作成（単発）
+    Route::post('/', [LessonSlotController::class, 'store']);
 });
