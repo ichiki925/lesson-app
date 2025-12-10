@@ -29,11 +29,8 @@ Route::prefix('reservations')->group(function () {
 
 // 先生側: 空き枠管理API（認証は後で追加）
 Route::prefix('lesson-slots')->group(function () {
-    // 空き枠一覧取得（カレンダー表示用）
     Route::get('/', [LessonSlotController::class, 'index']);
-
-    // 空き枠作成（単発）
     Route::post('/', [LessonSlotController::class, 'store']);
-
+    Route::put('/{id}', [LessonSlotController::class, 'update']);
     Route::delete('/{id}', [LessonSlotController::class, 'destroy']);
 });

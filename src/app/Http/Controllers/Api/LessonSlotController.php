@@ -140,7 +140,108 @@ class LessonSlotController extends Controller
      * 空き枠更新
      * PUT /api/lesson-slots/{id}
      */
-    
+    public function update(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'date' => 'sometimes|date|after_or_equal:today',
+            'start_time' => 'sometimes|date_format:H:i',
+            'duration' => 'sometimes|in:30,60',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // 空き枠を取得
+            $slot = LessonSlot::find($id);
+
+            if (!$slot) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '空き枠が見つかりません'
+                ], 404);
+            }
+
+            // 予約が入っているかチェック
+            if ($slot->reservations()->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'この空き枠には予約が入っているため変更できません'
+                ], 422);
+            }
+
+            // 更新するデータを準備
+            $updateData = [];
+
+            if ($request->has('date')) {
+                $updateData['date'] = $request->date;
+            }
+
+            if ($request->has('start_time') || $request->has('duration')) {
+                // 新しい開始時刻と期間を取得（変更がなければ現在の値を使用）
+                $startTime = $request->start_time ?? $slot->start_time->format('H:i:s');
+                $duration = $request->duration ?? $slot->duration;
+
+                // start_timeの形式を統一（H:i:s）
+                if (strlen($startTime) === 5) {
+                    // "16:00" の形式なら秒を追加
+                    $startTime .= ':00';
+                }
+
+                // 終了時刻を計算
+                $start = Carbon::createFromFormat('H:i:s', $startTime);
+                $end = $start->copy()->addMinutes($duration);
+
+                $updateData['start_time'] = $start->format('H:i:s');
+                $updateData['end_time'] = $end->format('H:i:s');
+                $updateData['duration'] = $duration;
+
+                // 重複チェック（自分自身は除外）
+                $date = $request->date ?? $slot->date;
+
+                $overlapping = LessonSlot::where('teacher_id', $slot->teacher_id)
+                    ->where('id', '!=', $id)  // 自分自身は除外
+                    ->whereDate('date', $date)
+                    ->where(function ($q) use ($updateData) {
+                        $q->whereTime('start_time', '<', $updateData['end_time'])
+                        ->whereTime('end_time', '>', $updateData['start_time']);
+                    })
+                    ->exists();
+
+                if ($overlapping) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'この時間帯は既に登録されています'
+                    ], 422);
+                }
+            }
+
+            // 更新実行
+            $slot->update($updateData);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => '空き枠を更新しました',
+                'data' => $slot->fresh()
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => '空き枠の更新に失敗しました',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
     /**
      * 空き枠削除
