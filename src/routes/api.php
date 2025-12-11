@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ReservationController;
 use App\Http\Controllers\Api\LessonSlotController;
+use App\Http\Controllers\Api\AuthController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -26,6 +27,15 @@ Route::prefix('reservations')->group(function () {
     // 生徒の予約履歴を取得
     Route::get('student/history', [ReservationController::class, 'getStudentReservations']);
 });
+
+Route::post('/login', [AuthController::class, 'login']);
+
+// 認証が必要なエンドポイント
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/me', [AuthController::class, 'me']);
+});
+
 
 // 先生側: 空き枠管理API（認証は後で追加）
 Route::prefix('lesson-slots')->group(function () {
