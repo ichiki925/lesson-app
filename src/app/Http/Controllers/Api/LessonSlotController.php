@@ -19,7 +19,6 @@ class LessonSlotController extends Controller
     public function index(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'teacher_id' => 'required|exists:teachers,id',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
         ]);
@@ -31,7 +30,7 @@ class LessonSlotController extends Controller
             ], 422);
         }
 
-        $teacherId = $request->teacher_id;
+        $teacherId = $request->user()->id;
         $startDate = $request->start_date;
         $endDate = $request->end_date;
 
@@ -70,7 +69,6 @@ class LessonSlotController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'teacher_id' => 'required|exists:teachers,id',
             'date' => 'required|date|after_or_equal:today',
             'start_time' => 'required|date_format:H:i',
             'duration' => 'required|in:30,60',
@@ -91,7 +89,7 @@ class LessonSlotController extends Controller
             $endTime = $startTime->copy()->addMinutes($request->duration);
 
             // 重複チェック（同じ先生、同じ日、時間が重なる枠）
-            $overlapping = LessonSlot::where('teacher_id', $request->teacher_id)
+            $overlapping = LessonSlot::where('teacher_id', $request->user()->id)
                 ->whereDate('date', $request->date)
                 ->where(function ($q) use ($request, $endTime) {
                     // 既存の枠の開始 < 新しい枠の終了
@@ -110,7 +108,7 @@ class LessonSlotController extends Controller
 
             // 空き枠作成
             $slot = LessonSlot::create([
-                'teacher_id' => $request->teacher_id,
+                'teacher_id' => $request->user()->id,
                 'date' => $request->date,
                 'start_time' => $request->start_time,
                 'end_time' => $endTime->format('H:i:s'),
@@ -158,8 +156,10 @@ class LessonSlotController extends Controller
         try {
             DB::beginTransaction();
 
-            // 空き枠を取得
-            $slot = LessonSlot::find($id);
+            // 変更後（ログインユーザーの空き枠のみ取得）
+            $slot = LessonSlot::where('id', $id)
+                ->where('teacher_id', $request->user()->id)
+                ->first();
 
             if (!$slot) {
                 return response()->json([
@@ -247,13 +247,14 @@ class LessonSlotController extends Controller
      * 空き枠削除
      * DELETE /api/lesson-slots/{id}
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         try {
             DB::beginTransaction();
 
-            // 空き枠を取得
-            $slot = LessonSlot::find($id);
+            $slot = LessonSlot::where('id', $id)
+                ->where('teacher_id', $request->user()->id)
+                ->first();
 
             if (!$slot) {
                 return response()->json([
@@ -297,7 +298,6 @@ class LessonSlotController extends Controller
     public function bulkStore(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'teacher_id' => 'required|exists:teachers,id',
             'date' => 'required|date|after_or_equal:today',
             'slots' => 'required|array|min:1',
             'slots.*.start_time' => 'required|date_format:H:i',
@@ -347,7 +347,7 @@ class LessonSlotController extends Controller
                 }
 
                 // ② DB 上の既存枠との重複チェック（既に作成したスロットは除外）
-                $query = LessonSlot::where('teacher_id', $request->teacher_id)
+                $query = LessonSlot::where('teacher_id', $request->user()->id)
                     ->whereDate('date', $request->date);
 
                 // 既に作成したスロットがあれば除外
@@ -385,7 +385,7 @@ class LessonSlotController extends Controller
                 }
                 // 空き枠作成
                 $slot = LessonSlot::create([
-                    'teacher_id' => $request->teacher_id,
+                    'teacher_id' => $request->user()->id,
                     'date' => $request->date,
                     'start_time' => $slotData['start_time'],
                     'end_time' => $endTime->format('H:i:s'),

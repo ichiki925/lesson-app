@@ -34,14 +34,15 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+
+    Route::prefix('lesson-slots')->group(function () {
+        Route::get('/', [LessonSlotController::class, 'index']);
+        Route::post('/', [LessonSlotController::class, 'store']);
+        Route::put('/{id}', [LessonSlotController::class, 'update']);
+        Route::delete('/{id}', [LessonSlotController::class, 'destroy']);
+        Route::post('/bulk', [LessonSlotController::class, 'bulkStore']);
+    });
 });
 
 
-// 先生側: 空き枠管理API（認証は後で追加）
-Route::prefix('lesson-slots')->group(function () {
-    Route::get('/', [LessonSlotController::class, 'index']);
-    Route::post('/', [LessonSlotController::class, 'store']);
-    Route::put('/{id}', [LessonSlotController::class, 'update']);
-    Route::delete('/{id}', [LessonSlotController::class, 'destroy']);
-    Route::post('/bulk', [LessonSlotController::class, 'bulkStore']);
-});
+
