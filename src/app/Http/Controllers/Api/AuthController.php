@@ -91,4 +91,56 @@ class AuthController extends Controller
             ],
         ], 200);
     }
+
+    /**
+     * 新規登録
+     * POST /api/register
+     */
+    public function register(Request $request)
+    {
+        // バリデーション
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:teachers,email',
+            'password' => 'required|string|min:6|confirmed',
+        ], [
+            'name.required' => '名前は必須です',
+            'email.required' => 'メールアドレスは必須です',
+            'email.email' => '有効なメールアドレスを入力してください',
+            'email.unique' => 'このメールアドレスは既に登録されています',
+            'password.required' => 'パスワードは必須です',
+            'password.min' => 'パスワードは6文字以上で入力してください',
+            'password.confirmed' => 'パスワードが一致しません',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // ユーザー作成
+        $teacher = Teacher::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+        ]);
+
+        // トークン生成
+        $token = $teacher->createToken('auth-token')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'message' => '登録しました',
+            'data' => [
+                'teacher' => [
+                    'id' => $teacher->id,
+                    'name' => $teacher->name,
+                    'email' => $teacher->email,
+                ],
+                'token' => $token,
+            ],
+        ], 201);
+    }
 }

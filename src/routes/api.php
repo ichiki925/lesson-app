@@ -26,6 +26,7 @@ Route::prefix('reservations')->group(function () {
 });
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register']);
 
 // 認証が必要なエンドポイント
 Route::middleware('auth:sanctum')->group(function () {
