@@ -5,10 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ReservationController;
 use App\Http\Controllers\Api\LessonSlotController;
 use App\Http\Controllers\Api\AuthController;
-
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+use App\Http\Controllers\Api\DashboardController;
 
 // 生徒側: 予約関連API
 Route::prefix('reservations')->group(function () {
@@ -34,6 +31,14 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+
+    Route::prefix('dashboard')->group(function () {
+        Route::get('/today-reservations', [DashboardController::class, 'getTodayReservations']);
+        Route::get('/week-reservations', [DashboardController::class, 'getWeekReservations']);
+        Route::get('/stats', [DashboardController::class, 'getStats']);
+        Route::get('/next-reservation', [DashboardController::class, 'getNextReservation']);
+        Route::get('/month-reservations', [DashboardController::class, 'getMonthReservations']);
+    });
 
     Route::prefix('lesson-slots')->group(function () {
         Route::get('/', [LessonSlotController::class, 'index']);
