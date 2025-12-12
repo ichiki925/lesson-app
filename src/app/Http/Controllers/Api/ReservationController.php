@@ -5,14 +5,17 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Reservation;
 use App\Models\LessonSlot;
+use App\Mail\ReservationCreated;
+use App\Mail\ReservationCanceled;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 
 class ReservationController extends Controller
 {
     /**
      * 利用可能なレッスン枠一覧を取得
-     * 
+     *
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
@@ -58,7 +61,7 @@ class ReservationController extends Controller
 
     /**
      * 予約を作成
-     * 
+     *
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
@@ -121,10 +124,9 @@ class ReservationController extends Controller
 
             DB::commit();
 
-            // 6. 確認メールを送信（先生と生徒）
-            // TODO: Mail::send() で予約確認メールを送信
-            // - 先生: 新規予約通知
-            // - 生徒: 予約完了通知 + キャンセルURL
+            // 6. 確認メールを送信（生徒）
+            Mail::to($reservation->student_email)
+                ->send(new ReservationCreated($reservation));
 
             // 7. レスポンス
             return response()->json([
@@ -143,7 +145,7 @@ class ReservationController extends Controller
 
     /**
      * 予約情報を取得
-     * 
+     *
      * @param string $id
      * @return \Illuminate\Http\JsonResponse
      */
@@ -197,7 +199,10 @@ class ReservationController extends Controller
             DB::beginTransaction();
 
             // 予約ステータスを「cancelled」に更新
-            $reservation->update(['status' => 'cancelled']);
+            $reservation->update([
+                'status' => 'cancelled',
+                'canceled_at' => now(),
+            ]);
 
             // 関連するレッスン枠を再度利用可能に
             $lessonSlot = $reservation->lessonSlot;
@@ -205,10 +210,8 @@ class ReservationController extends Controller
 
             DB::commit();
 
-            // 4. キャンセル通知メールを送信（先生と生徒）
-            // TODO: Mail::send() でキャンセル通知メールを送信
-            // - 先生: キャンセル通知
-            // - 生徒: キャンセル確認メール
+            // キャンセルメール送信
+            Mail::to($reservation->student_email)->send(new ReservationCanceled($reservation));
 
             // 5. レスポンス
             return response()->json([
