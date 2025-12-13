@@ -143,4 +143,114 @@ class AuthController extends Controller
             ],
         ], 201);
     }
+
+    /**
+     * パスワードリセットリクエスト
+     * POST /api/forgot-password
+     */
+    public function forgotPassword(Request $request)
+    {
+        // バリデーション
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email|exists:teachers,email',
+        ], [
+            'email.required' => 'メールアドレスは必須です',
+            'email.email' => '有効なメールアドレスを入力してください',
+            'email.exists' => 'このメールアドレスは登録されていません',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // パスワードリセットトークンを生成
+        $token = \Str::random(64);
+
+        // トークンをデータベースに保存
+        \DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $request->email],
+            [
+                'email' => $request->email,
+                'token' => Hash::make($token),
+                'created_at' => now(),
+            ]
+        );
+
+        // リセットリンクをメールで送信
+        $teacher = Teacher::where('email', $request->email)->first();
+        \Mail::to($teacher->email)->send(new \App\Mail\PasswordResetLink($teacher, $token));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'パスワードリセット用のリンクをメールで送信しました',
+        ], 200);
+    }
+
+    /**
+     * パスワードリセット実行
+     * POST /api/reset-password
+     */
+    public function resetPassword(Request $request)
+    {
+        // バリデーション
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email|exists:teachers,email',
+            'token' => 'required|string',
+            'password' => 'required|string|min:6|confirmed',
+        ], [
+            'email.required' => 'メールアドレスは必須です',
+            'email.email' => '有効なメールアドレスを入力してください',
+            'email.exists' => 'このメールアドレスは登録されていません',
+            'token.required' => 'トークンは必須です',
+            'password.required' => 'パスワードは必須です',
+            'password.min' => 'パスワードは6文字以上で入力してください',
+            'password.confirmed' => 'パスワードが一致しません',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // トークンの確認
+        $resetRecord = \DB::table('password_reset_tokens')
+            ->where('email', $request->email)
+            ->first();
+
+        if (!$resetRecord || !Hash::check($request->token, $resetRecord->token)) {
+            return response()->json([
+                'success' => false,
+                'message' => '無効なトークンです',
+            ], 400);
+        }
+
+        // トークンの有効期限チェック（1時間）
+        if (now()->diffInMinutes($resetRecord->created_at) > 60) {
+            return response()->json([
+                'success' => false,
+                'message' => 'トークンの有効期限が切れています',
+            ], 400);
+        }
+
+        // パスワードを更新
+        $teacher = Teacher::where('email', $request->email)->first();
+        $teacher->update([
+            'password' => Hash::make($request->password),
+        ]);
+
+        // トークンを削除
+        \DB::table('password_reset_tokens')
+            ->where('email', $request->email)
+            ->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'パスワードが正常にリセットされました',
+        ], 200);
+    }
 }
